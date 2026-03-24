@@ -454,10 +454,7 @@
             const playerName = mode === 'PvAI' ? (currentPlayer === 'black' ? '你' : 'AI') : (currentPlayer === 'black' ? '黑棋' : '白棋');
             msg.textContent = `${playerName} → ${row + 1}行${col + 1}列`;
             
-            // 定位到鼠标旁边
-            const rect = e.target.getBoundingClientRect();
-            tooltip.style.left = (rect.right + 10) + 'px';
-            tooltip.style.top = (rect.top - 20) + 'px';
+            positionTooltip(tooltip, e.target);
             tooltip.style.display = 'block';
             tooltip.dataset.row = row;
             tooltip.dataset.col = col;
@@ -486,14 +483,38 @@
             const playerName = mode === 'PvAI' ? (currentPlayer === 'black' ? '你(黑)' : 'AI(白)') : (currentPlayer === 'black' ? '黑棋' : '白棋');
             msg.textContent = `${playerName} → ${row + 1}行${col + 1}列`;
             
-            const rect = e.target.getBoundingClientRect();
-            tooltip.style.left = (rect.right + 10) + 'px';
-            tooltip.style.top = (rect.top - 20) + 'px';
+            positionTooltip(tooltip, e.target);
             tooltip.style.display = 'block';
             tooltip.dataset.row = row;
             tooltip.dataset.col = col;
             
             clearTimeout(tooltipTimeout);
+        }
+        
+        function positionTooltip(tooltip, target) {
+            tooltip.style.display = 'block';
+            tooltip.style.visibility = 'hidden';
+            
+            const rect = target.getBoundingClientRect();
+            const tw = tooltip.offsetWidth;
+            const th = tooltip.offsetHeight;
+            const vw = window.innerWidth;
+            const vh = window.innerHeight;
+            
+            // 默认在上方
+            let top = rect.top - th - 10;
+            let left = rect.left + rect.width / 2 - tw / 2;
+            
+            // 超出上边界 → 改到下方
+            if (top < 10) top = rect.bottom + 10;
+            // 超出右边界
+            if (left + tw > vw - 10) left = vw - tw - 10;
+            // 超出左边界
+            if (left < 10) left = 10;
+            
+            tooltip.style.top = top + 'px';
+            tooltip.style.left = left + 'px';
+            tooltip.style.visibility = 'visible';
         }
         
         function confirmPlace() {
