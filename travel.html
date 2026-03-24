@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>我的旅行地图</title>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+  <style>
+    /* ===== Reset & Base ===== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-deep:    #0a0e1a;
+      --bg-card:    #111827;
+      --bg-card2:   #1a2235;
+      --border:     #1e2d45;
+      --accent:     #f97316;
+      --accent2:    #ef4444;
+      --accent-glow:#f9731640;
+      --text:       #e2e8f0;
+      --text-muted: #64748b;
+      --text-dim:   #94a3b8;
+      --map-fill:   #0f1e35;
+      --map-hover:  #162840;
+      --map-stroke: #1e3a5f;
+      --visited:    #1e3a5f;
+      --visited-h:  #254d7a;
+      --blue-glow:  #3b82f640;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg-deep);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+      overflow: hidden;
+    }
+
+    /* ===== Layout ===== */
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ===== Header Stats ===== */
+    #stats-bar {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 0;
+      padding: 0 20px;
+      height: 64px;
+      background: linear-gradient(180deg, #0d1525 0%, #0a0e1a 100%);
+      border-bottom: 1px solid var(--border);
+      position: relative;
+      z-index: 10;
+    }
+
+    .stats-title {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: var(--text);
+      margin-right: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .stats-title .icon { font-size: 20px; }
+
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0 20px;
+      border-left: 1px solid var(--border);
+    }
+    .stat-value {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1.2;
+      font-variant-numeric: tabular-nums;
+    }
+    .stat-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      letter-spacing: 1px;
+      margin-top: 2px;
+    }
+
+    /* ===== Main Content ===== */
+    #main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* ===== Map ===== */
+    #map-container {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #map-svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .province {
+      fill: var(--map-fill);
+      stroke: var(--map-stroke);
+      stroke-width: 0.8;
+      transition: fill 0.2s;
+      cursor: default;
+    }
+    .province:hover { fill: var(--map-hover); }
+    .province.visited { fill: var(--visited); }
+    .province.visited:hover { fill: var(--visited-h); }
+
+    /* City dots */
+    .city-group { cursor: pointer; }
+
+    .city-ring {
+      fill: none;
+      stroke: var(--accent);
+      stroke-width: 1.5;
+      opacity: 0.4;
+      animation: pulse-ring 2.5s ease-out infinite;
+    }
+    .city-dot {
+      fill: var(--accent);
+      stroke: #fff;
+      stroke-width: 1.5;
+      filter: drop-shadow(0 0 6px var(--accent-glow));
+      transition: r 0.2s, filter 0.2s;
+    }
+    .city-group:hover .city-dot {
+      filter: drop-shadow(0 0 12px var(--accent));
+    }
+    .city-label {
+      fill: var(--text);
+      font-size: 11px;
+      font-weight: 500;
+      pointer-events: none;
+      text-shadow: 0 1px 4px #000;
+    }
+
+    @keyframes pulse-ring {
+      0%   { r: 6px; opacity: 0.6; }
+      100% { r: 22px; opacity: 0; }
+    }
+
+    /* Home city (深圳) */
+    .city-home .city-dot {
+      fill: #38bdf8;
+      filter: drop-shadow(0 0 6px #38bdf840);
+    }
+    .city-home .city-ring { stroke: #38bdf8; }
+    .city-home:hover .city-dot { filter: drop-shadow(0 0 12px #38bdf8); }
+
+    /* Flight arcs */
+    .trip-arc {
+      fill: none;
+      stroke: var(--accent);
+      stroke-width: 1.2;
+      stroke-dasharray: 4 3;
+      opacity: 0.35;
+      animation: dash-move 3s linear infinite;
+    }
+    @keyframes dash-move {
+      to { stroke-dashoffset: -28; }
+    }
+
+    /* ===== Side Panel ===== */
+    #side-panel {
+      width: 300px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-card);
+      border-left: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: 14px 16px 10px;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+
+    #timeline {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+    }
+    #timeline::-webkit-scrollbar { width: 4px; }
+    #timeline::-webkit-scrollbar-track { background: transparent; }
+    #timeline::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .trip-card {
+      margin: 6px 10px;
+      padding: 12px 14px;
+      background: var(--bg-card2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s, transform 0.15s;
+      position: relative;
+    }
+    .trip-card:hover {
+      border-color: var(--accent);
+      background: #1e2d45;
+      transform: translateX(2px);
+    }
+    .trip-card.active {
+      border-color: var(--accent);
+      background: #1e2d45;
+    }
+
+    .trip-card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .trip-card-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.3;
+    }
+    .trip-card-date {
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      margin-top: 2px;
+    }
+
+    .trip-card-route {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+    }
+    .trip-card-route .arrow { color: var(--accent); font-size: 14px; }
+
+    .trip-card-meta {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .tag-transport {
+      background: #1e3a5f;
+      color: #7dd3fc;
+    }
+    .tag-distance {
+      background: #1a2e1a;
+      color: #86efac;
+    }
+
+    .trip-card-note {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      border-top: 1px solid var(--border);
+      padding-top: 8px;
+    }
+
+    /* ===== Modal ===== */
+    #modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      backdrop-filter: blur(4px);
+    }
+    #modal-overlay.open { display: flex; }
+
+    #modal {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      width: 100%;
+      max-width: 480px;
+      max-height: 80vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+      animation: modal-in 0.25s ease;
+    }
+    @keyframes modal-in {
+      from { opacity: 0; transform: scale(0.92) translateY(16px); }
+      to   { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    #modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 20px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    #modal-city-name {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    #modal-city-count {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    #modal-close {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 18px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s, color 0.2s;
+    }
+    #modal-close:hover { background: var(--border); color: var(--text); }
+
+    #modal-body {
+      overflow-y: auto;
+      padding: 12px 16px 16px;
+      flex: 1;
+    }
+    #modal-body::-webkit-scrollbar { width: 4px; }
+    #modal-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .modal-trip-card {
+      padding: 14px;
+      background: var(--bg-card2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 10px;
+    }
+    .modal-trip-card:last-child { margin-bottom: 0; }
+
+    .modal-trip-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+    .modal-trip-info {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .modal-info-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .modal-info-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .modal-info-value {
+      font-size: 13px;
+      color: var(--text-dim);
+      font-weight: 500;
+    }
+    .modal-trip-note {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+    }
+
+    /* ===== Map tooltip ===== */
+    #tooltip {
+      position: fixed;
+      pointer-events: none;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 12px;
+      color: var(--text);
+      z-index: 50;
+      opacity: 0;
+      transition: opacity 0.15s;
+      white-space: nowrap;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    #tooltip.show { opacity: 1; }
+    #tooltip .tt-city { font-weight: 700; font-size: 14px; color: var(--accent); }
+    #tooltip .tt-count { color: var(--text-muted); margin-top: 2px; }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 768px) {
+      html, body { overflow: auto; }
+      #app { height: auto; overflow: auto; }
+
+      #stats-bar {
+        height: auto;
+        padding: 10px 12px;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .stats-title { width: 100%; margin-right: 0; font-size: 15px; }
+      .stat-item { border-left: none; border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; flex: 1; min-width: 80px; }
+      .stat-value { font-size: 18px; }
+
+      #main { flex-direction: column; overflow: visible; }
+
+      #map-container {
+        height: 55vw;
+        min-height: 260px;
+        max-height: 420px;
+      }
+
+      #side-panel {
+        width: 100%;
+        border-left: none;
+        border-top: 1px solid var(--border);
+        max-height: 360px;
+      }
+
+      #timeline { max-height: 300px; }
+    }
+
+    @media (max-width: 480px) {
+      #map-container { height: 65vw; }
+      .stat-value { font-size: 16px; }
+    }
+
+    /* ===== Loading ===== */
+    #loading {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-deep);
+      z-index: 20;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { color: var(--text-muted); font-size: 13px; letter-spacing: 1px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .pulse-ring, .dash-move, * { animation: none !important; }
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Stats Bar -->
+  <header id="stats-bar">
+    <div class="stats-title">
+      <span class="icon">🗺️</span>
+      我的旅行地图
+    </div>
+    <div class="stat-item">
+      <span class="stat-value" id="stat-cities">0</span>
+      <span class="stat-label">去过城市</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-value" id="stat-trips">0</span>
+      <span class="stat-label">出行次数</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-value" id="stat-distance">0</span>
+      <span class="stat-label">总里程 km</span>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <div id="main">
+
+    <!-- Map -->
+    <div id="map-container">
+      <div id="loading">
+        <div class="spinner"></div>
+        <div class="loading-text">加载地图数据…</div>
+      </div>
+      <svg id="map-svg"></svg>
+    </div>
+
+    <!-- Side Panel -->
+    <aside id="side-panel">
+      <div class="panel-header">出行记录</div>
+      <div id="timeline"></div>
+    </aside>
+
+  </div>
+</div>
+
+<!-- Tooltip -->
+<div id="tooltip">
+  <div class="tt-city" id="tt-city"></div>
+  <div class="tt-count" id="tt-count"></div>
+</div>
+
+<!-- Modal -->
+<div id="modal-overlay">
+  <div id="modal">
+    <div id="modal-header">
+      <div>
+        <div id="modal-city-name"></div>
+        <div id="modal-city-count"></div>
+      </div>
+      <button id="modal-close">✕</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+//  Data & State
+// ============================================================
+let tripsData = [];
+let cityMap = {};   // cityName -> { name, lng, lat, trips[] }
+let geoData = null;
+
+const HOME_CITY = { name: "深圳", lng: 114.06, lat: 22.54 };
+
+const transportIcon = {
+  '飞机': '✈️', '高铁': '🚄', '火车': '🚂',
+  '汽车': '🚗', '轮船': '🚢', '步行': '🚶', '其他': '🚌'
+};
+
+// ============================================================
+//  Fetch with timeout
+// ============================================================
+async function fetchWithTimeout(url, timeout = 10000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    return res;
+  } catch (e) {
+    clearTimeout(timer);
+    throw e;
+  }
+}
+
+// ============================================================
+//  Fetch data
+// ============================================================
+async function loadData() {
+  const tripsRes = await fetchWithTimeout('trips.json');
+
+  // Try primary CDN, then fallback
+  let geoRes;
+  const geoUrls = [
+    'https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json',
+    'https://raw.githubusercontent.com/echarts-maps/echarts-china-cities-js/master/geojson/china.json'
+  ];
+  for (const url of geoUrls) {
+    geoRes = await fetchWithTimeout(url);
+    if (geoRes.ok) break;
+  }
+
+  if (!tripsRes.ok) throw new Error('无法加载 trips.json');
+  if (!geoRes.ok) throw new Error('无法加载地图数据');
+
+  const tripsJson = await tripsRes.json();
+  geoData = await geoRes.json();
+
+  tripsData = tripsJson.trips.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  // Build city map (destination cities)
+  tripsData.forEach(t => {
+    const key = t.to.name;
+    if (!cityMap[key]) {
+      cityMap[key] = { name: key, lng: t.to.lng, lat: t.to.lat, trips: [] };
+    }
+    cityMap[key].trips.push(t);
+  });
+
+  return true;
+}
+
+// ============================================================
+//  Stats
+// ============================================================
+function renderStats() {
+  const cities = Object.keys(cityMap).length;
+  const trips  = tripsData.length;
+  const dist   = tripsData.reduce((s, t) => s + (t.distance || 0), 0);
+
+  animateCount('stat-cities', cities);
+  animateCount('stat-trips', trips);
+  animateCount('stat-distance', dist);
+}
+
+function animateCount(id, target) {
+  const el = document.getElementById(id);
+  const duration = 800;
+  const start = performance.now();
+  function step(now) {
+    const p = Math.min((now - start) / duration, 1);
+    const ease = 1 - Math.pow(1 - p, 3);
+    el.textContent = Math.round(ease * target).toLocaleString();
+    if (p < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+// ============================================================
+//  Map
+// ============================================================
+function renderMap() {
+  const container = document.getElementById('map-container');
+  const svg = d3.select('#map-svg');
+  svg.selectAll('*').remove();
+
+  const W = container.clientWidth;
+  const H = container.clientHeight;
+
+  // Projection — fit China
+  const projection = d3.geoMercator()
+    .center([105, 38])
+    .scale(Math.min(W, H) * 1.05)
+    .translate([W / 2, H / 2]);
+
+  const path = d3.geoPath().projection(projection);
+
+  // Visited province detection (rough bounding box check)
+  const visitedCities = Object.values(cityMap);
+
+  // Draw provinces
+  const g = svg.append('g').attr('class', 'provinces');
+  g.selectAll('path')
+    .data(geoData.features)
+    .join('path')
+    .attr('class', d => {
+      // Check if any visited city is roughly in this province
+      const bbox = path.bounds(d);
+      const inProv = visitedCities.some(c => {
+        const [px, py] = projection([c.lng, c.lat]);
+        return px >= bbox[0][0] && px <= bbox[1][0] &&
+               py >= bbox[0][1] && py <= bbox[1][1];
+      });
+      return 'province' + (inProv ? ' visited' : '');
+    })
+    .attr('d', path);
+
+  // Draw arcs (flight paths)
+  const arcG = svg.append('g').attr('class', 'arcs');
+  tripsData.forEach(t => {
+    const src = projection([t.from.lng, t.from.lat]);
+    const dst = projection([t.to.lng, t.to.lat]);
+    if (!src || !dst) return;
+
+    // Quadratic bezier control point (arc upward)
+    const mx = (src[0] + dst[0]) / 2;
+    const my = (src[1] + dst[1]) / 2 - Math.hypot(dst[0]-src[0], dst[1]-src[1]) * 0.25;
+
+    arcG.append('path')
+      .attr('class', 'trip-arc')
+      .attr('d', `M${src[0]},${src[1]} Q${mx},${my} ${dst[0]},${dst[1]}`)
+      .style('stroke-dashoffset', 0);
+  });
+
+  // Draw home city (深圳)
+  const [hx, hy] = projection([HOME_CITY.lng, HOME_CITY.lat]);
+  const hg = svg.append('g')
+    .attr('class', 'city-group city-home')
+    .attr('transform', `translate(${hx},${hy})`);
+
+  hg.append('circle').attr('class', 'city-ring').attr('r', 6);
+  hg.append('circle').attr('class', 'city-dot').attr('r', 5);
+  hg.append('text')
+    .attr('class', 'city-label')
+    .attr('x', 8).attr('y', 4)
+    .text(HOME_CITY.name);
+
+  // Draw destination cities
+  const maxVisits = Math.max(...Object.values(cityMap).map(c => c.trips.length), 1);
+  const rScale = d3.scaleSqrt().domain([1, maxVisits]).range([6, 14]);
+
+  const tooltip = document.getElementById('tooltip');
+  const ttCity  = document.getElementById('tt-city');
+  const ttCount = document.getElementById('tt-count');
+
+  Object.values(cityMap).forEach(city => {
+    const [cx, cy] = projection([city.lng, city.lat]);
+    const r = rScale(city.trips.length);
+
+    const cg = svg.append('g')
+      .attr('class', 'city-group')
+      .attr('transform', `translate(${cx},${cy})`)
+      .style('cursor', 'pointer');
+
+    // Pulse ring
+    cg.append('circle').attr('class', 'city-ring').attr('r', r);
+
+    // Main dot
+    cg.append('circle')
+      .attr('class', 'city-dot')
+      .attr('r', r);
+
+    // Label
+    cg.append('text')
+      .attr('class', 'city-label')
+      .attr('x', r + 4)
+      .attr('y', 4)
+      .text(city.name);
+
+    // Events
+    cg.on('mouseenter', (event) => {
+      ttCity.textContent = city.name;
+      ttCount.textContent = `共 ${city.trips.length} 次出行`;
+      tooltip.classList.add('show');
+    })
+    .on('mousemove', (event) => {
+      tooltip.style.left = (event.clientX + 14) + 'px';
+      tooltip.style.top  = (event.clientY - 10) + 'px';
+    })
+    .on('mouseleave', () => {
+      tooltip.classList.remove('show');
+    })
+    .on('click', () => {
+      tooltip.classList.remove('show');
+      openModal(city);
+    });
+  });
+}
+
+// ============================================================
+//  Timeline
+// ============================================================
+function renderTimeline() {
+  const container = document.getElementById('timeline');
+  container.innerHTML = '';
+
+  tripsData.forEach(trip => {
+    const card = document.createElement('div');
+    card.className = 'trip-card';
+    card.dataset.id = trip.id;
+
+    const icon = transportIcon[trip.transport] || '🚌';
+    const dateStr = formatDate(trip.date);
+
+    card.innerHTML = `
+      <div class="trip-card-header">
+        <div class="trip-card-title">${escapeHtml(trip.title)}</div>
+        <div class="trip-card-date">${escapeHtml(dateStr)}</div>
+      </div>
+      <div class="trip-card-route">
+        <span>${escapeHtml(trip.from.name)}</span>
+        <span class="arrow">→</span>
+        <span>${escapeHtml(trip.to.name)}</span>
+      </div>
+      <div class="trip-card-meta">
+        <span class="tag tag-transport">${icon} ${escapeHtml(trip.transport)}</span>
+        <span class="tag tag-distance">📍 ${escapeHtml(trip.distance.toLocaleString())} km</span>
+      </div>
+      ${trip.note ? `<div class="trip-card-note">${escapeHtml(trip.note)}</div>` : ''}
+    `;
+
+    card.addEventListener('click', () => {
+      const city = cityMap[trip.to.name];
+      if (city) openModal(city, trip.id);
+    });
+
+    container.appendChild(card);
+  });
+}
+
+// ============================================================
+//  Modal
+// ============================================================
+function openModal(city, highlightId) {
+  const overlay = document.getElementById('modal-overlay');
+  document.getElementById('modal-city-name').textContent = `📍 ${city.name}`;
+  document.getElementById('modal-city-count').textContent =
+    `共 ${city.trips.length} 次出行记录`;
+
+  const body = document.getElementById('modal-body');
+  body.innerHTML = '';
+
+  city.trips.forEach(trip => {
+    const icon = transportIcon[trip.transport] || '🚌';
+    const card = document.createElement('div');
+    card.className = 'modal-trip-card';
+    if (trip.id === highlightId) card.style.borderColor = 'var(--accent)';
+
+    card.innerHTML = `
+      <div class="modal-trip-title">${escapeHtml(trip.title)}</div>
+      <div class="modal-trip-info">
+        <div class="modal-info-item">
+          <span class="modal-info-label">日期</span>
+          <span class="modal-info-value">${escapeHtml(formatDate(trip.date))}</span>
+        </div>
+        <div class="modal-info-item">
+          <span class="modal-info-label">交通</span>
+          <span class="modal-info-value">${icon} ${escapeHtml(trip.transport)}</span>
+        </div>
+        <div class="modal-info-item">
+          <span class="modal-info-label">出发地</span>
+          <span class="modal-info-value">${escapeHtml(trip.from.name)}</span>
+        </div>
+        <div class="modal-info-item">
+          <span class="modal-info-label">里程</span>
+          <span class="modal-info-value">${escapeHtml(trip.distance.toLocaleString())} km</span>
+        </div>
+      </div>
+      ${trip.note ? `<div class="modal-trip-note">💬 ${escapeHtml(trip.note)}</div>` : ''}
+    `;
+    body.appendChild(card);
+  });
+
+  overlay.classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+}
+
+document.getElementById('modal-close').addEventListener('click', closeModal);
+document.getElementById('modal-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-overlay')) closeModal();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ============================================================
+//  Helpers
+// ============================================================
+function escapeHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function formatDate(dateStr) {
+  const d = new Date(dateStr);
+  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`;
+}
+
+// ============================================================
+//  Resize
+// ============================================================
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (geoData) renderMap();
+  }, 300);
+});
+
+// ============================================================
+//  Init
+// ============================================================
+async function init() {
+  try {
+    await loadData();
+    document.getElementById('loading').style.display = 'none';
+    renderStats();
+    renderMap();
+    renderTimeline();
+  } catch (err) {
+    console.error('初始化失败:', err);
+    document.getElementById('loading').innerHTML =
+      `<div style="color:#ef4444;text-align:center;padding:20px">
+        <div style="font-size:32px;margin-bottom:12px">⚠️</div>
+        <div>地图加载失败，请检查网络连接</div>
+        <div style="font-size:12px;color:#64748b;margin-top:8px">${err.message}</div>
+      </div>`;
+  }
+}
+
+init();
+</script>
+</body>
+</html>
