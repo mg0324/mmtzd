@@ -127,10 +127,6 @@
             background: rgba(102, 126, 234, 0.3);
         }
         
-        .cell.pending {
-            background: rgba(102, 126, 234, 0.5);
-        }
-        
         .cell.occupied {
             cursor: default;
         }
@@ -284,6 +280,20 @@
             margin-bottom: 20px;
         }
         
+        .tooltip {
+            position: fixed;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+            z-index: 50;
+            animation: tooltipIn 0.2s ease;
+        }
+        
+        @keyframes tooltipIn {
+            from { transform: translateY(-10px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
         .ai-thinking {
             display: none;
             position: fixed;
@@ -383,13 +393,12 @@
         <button class="btn-primary" onclick="resetGame()">重新开始</button>
     </div>
     
-    <div class="modal" id="confirmModal">
-        <div class="modal-content" style="padding: 25px 35px;">
-            <h2 style="font-size: 1.3em; margin-bottom: 15px;">⚠️ 确认落子</h2>
-            <p id="confirmMsg" style="margin-bottom: 20px;">确认在此处落子？</p>
-            <div style="display: flex; gap: 15px; justify-content: center;">
-                <button class="btn-primary" onclick="confirmPlace()">确认</button>
-                <button onclick="cancelPlace()" style="background: #999; color: white; padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer;">取消</button>
+    <div class="tooltip" id="confirmTooltip">
+        <div style="padding: 15px 20px;">
+            <div id="tooltipMsg" style="margin-bottom: 12px; font-size: 0.95em;">确认落子？</div>
+            <div style="display: flex; gap: 10px;">
+                <button onclick="confirmPlace()" style="padding: 8px 16px; background: #667eea; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9em;">✓ 确认</button>
+                <button onclick="cancelPlace()" style="padding: 8px 16px; background: #999; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9em;">✗ 取消</button>
             </div>
         </div>
     </div>
@@ -411,6 +420,8 @@
         let history = [];
         let gameOver = false;
         let mode = 'PvP';
+        let pendingMove = null;
+        let tooltipTimeout = null;
         
         const directions = [
             [0, 1], [1, 0], [1, 1], [1, -1]
@@ -426,38 +437,70 @@
                     cell.className = 'cell';
                     cell.dataset.row = row;
                     cell.dataset.col = col;
-                    cell.onclick = () => handleClick(row, col);
+                    cell.onclick = (e) => handleClick(row, col, e);
+                    cell.onmouseenter = (e) => showTooltipPreview(row, col, e);
+                    cell.onmouseleave = hideTooltipPreview;
                     boardEl.appendChild(cell);
                 }
             }
         }
         
-        function handleClick(row, col) {
+        function showTooltipPreview(row, col, e) {
             if (gameOver || board[row][col]) return;
-            
-            // 人机模式下，黑棋先手
             if (mode === 'PvAI' && currentPlayer === 'white') return;
             
-            // 显示确认弹窗
-            showConfirmModal(row, col);
+            const tooltip = document.getElementById('confirmTooltip');
+            const msg = document.getElementById('tooltipMsg');
+            const playerName = mode === 'PvAI' ? (currentPlayer === 'black' ? '你' : 'AI') : (currentPlayer === 'black' ? '黑棋' : '白棋');
+            msg.textContent = `${playerName} → ${row + 1}行${col + 1}列`;
+            
+            // 定位到鼠标旁边
+            const rect = e.target.getBoundingClientRect();
+            tooltip.style.left = (rect.right + 10) + 'px';
+            tooltip.style.top = (rect.top - 20) + 'px';
+            tooltip.style.display = 'block';
+            tooltip.dataset.row = row;
+            tooltip.dataset.col = col;
+            
+            clearTimeout(tooltipTimeout);
+            tooltipTimeout = setTimeout(() => {
+                tooltip.style.display = 'none';
+            }, 3000);
         }
         
-        function showConfirmModal(row, col) {
-            const modal = document.getElementById('confirmModal');
-            const msg = document.getElementById('confirmMsg');
-            const playerName = mode === 'PvAI' ? (currentPlayer === 'black' ? '你(黑棋)' : 'AI(白棋)') : (currentPlayer === 'black' ? '黑棋' : '白棋');
-            msg.textContent = `${playerName} 落子于 ${row + 1}行${col + 1}列，确认？`;
+        function hideTooltipPreview() {
+            // 不自动隐藏，等待点击确认
+        }
+        
+        function handleClick(row, col, e) {
+            if (gameOver || board[row][col]) return;
+            if (mode === 'PvAI' && currentPlayer === 'white') return;
             
-            modal.dataset.row = row;
-            modal.dataset.col = col;
-            modal.classList.add('show');
+            // 显示确认tooltip
+            showTooltip(row, col, e);
+        }
+        
+        function showTooltip(row, col, e) {
+            const tooltip = document.getElementById('confirmTooltip');
+            const msg = document.getElementById('tooltipMsg');
+            const playerName = mode === 'PvAI' ? (currentPlayer === 'black' ? '你(黑)' : 'AI(白)') : (currentPlayer === 'black' ? '黑棋' : '白棋');
+            msg.textContent = `${playerName} → ${row + 1}行${col + 1}列`;
+            
+            const rect = e.target.getBoundingClientRect();
+            tooltip.style.left = (rect.right + 10) + 'px';
+            tooltip.style.top = (rect.top - 20) + 'px';
+            tooltip.style.display = 'block';
+            tooltip.dataset.row = row;
+            tooltip.dataset.col = col;
+            
+            clearTimeout(tooltipTimeout);
         }
         
         function confirmPlace() {
-            const modal = document.getElementById('confirmModal');
-            const row = parseInt(modal.dataset.row);
-            const col = parseInt(modal.dataset.col);
-            modal.classList.remove('show');
+            const tooltip = document.getElementById('confirmTooltip');
+            const row = parseInt(tooltip.dataset.row);
+            const col = parseInt(tooltip.dataset.col);
+            tooltip.style.display = 'none';
             
             placePiece(row, col);
             
@@ -469,7 +512,7 @@
         }
         
         function cancelPlace() {
-            document.getElementById('confirmModal').classList.remove('show');
+            document.getElementById('confirmTooltip').style.display = 'none';
         }
         
         function placePiece(row, col, isAI = false) {
@@ -557,7 +600,6 @@
         
         function getWinPositions(row, col) {
             const player = board[row][col];
-            const positions = [[row, col]];
             
             for (const [dr, dc] of directions) {
                 let line = [[row, col]];
@@ -619,11 +661,6 @@
         }
         
         function findBestMove() {
-            // 简单的评分算法
-            let bestScore = -Infinity;
-            let bestMove = { row: 7, col: 7 };
-            
-            // 首先检查是否能赢
             for (let row = 0; row < BOARD_SIZE; row++) {
                 for (let col = 0; col < BOARD_SIZE; col++) {
                     if (!board[row][col]) {
@@ -637,7 +674,6 @@
                 }
             }
             
-            // 然后检查是否需要防守（玩家即将获胜）
             for (let row = 0; row < BOARD_SIZE; row++) {
                 for (let col = 0; col < BOARD_SIZE; col++) {
                     if (!board[row][col]) {
@@ -651,7 +687,9 @@
                 }
             }
             
-            // 评分选择最佳位置
+            let bestScore = -Infinity;
+            let bestMove = { row: 7, col: 7 };
+            
             for (let row = 0; row < BOARD_SIZE; row++) {
                 for (let col = 0; col < BOARD_SIZE; col++) {
                     if (!board[row][col]) {
@@ -670,11 +708,9 @@
         function evaluatePosition(row, col) {
             let score = 0;
             
-            // 靠近中心的位置更有价值
             const centerDist = Math.max(Math.abs(row - 7), Math.abs(col - 7));
             score += (7 - centerDist) * 2;
             
-            // 评估每个方向
             for (const [dr, dc] of directions) {
                 score += evaluateDirection(row, col, dr, dc, 'white') * 1.5;
                 score += evaluateDirection(row, col, dr, dc, 'black');
@@ -687,7 +723,6 @@
             let count = 0;
             let open = 0;
             
-            // 正向
             let r = row + dr;
             let c = col + dc;
             let consecutive = 0;
@@ -710,7 +745,6 @@
             if (!blocked && consecutive > 0) open++;
             count += consecutive;
             
-            // 反向
             r = row - dr;
             c = col - dc;
             consecutive = 0;
@@ -750,13 +784,12 @@
             gameOver = false;
             
             document.getElementById('modal').classList.remove('show');
-            document.getElementById('confirmModal').classList.remove('show');
+            document.getElementById('confirmTooltip').style.display = 'none';
             document.getElementById('logContent').innerHTML = '';
             updatePlayerIndicator();
             initBoard();
         }
         
-        // 初始化
         resetGame();
     </script>
 </body>
