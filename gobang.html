@@ -124,7 +124,11 @@
         }
         
         .cell:hover:not(.occupied) {
-            background: rgba(102, 126, 234, 0.2);
+            background: rgba(102, 126, 234, 0.3);
+        }
+        
+        .cell.pending {
+            background: rgba(102, 126, 234, 0.5);
         }
         
         .cell.occupied {
@@ -379,6 +383,17 @@
         <button class="btn-primary" onclick="resetGame()">重新开始</button>
     </div>
     
+    <div class="modal" id="confirmModal">
+        <div class="modal-content" style="padding: 25px 35px;">
+            <h2 style="font-size: 1.3em; margin-bottom: 15px;">⚠️ 确认落子</h2>
+            <p id="confirmMsg" style="margin-bottom: 20px;">确认在此处落子？</p>
+            <div style="display: flex; gap: 15px; justify-content: center;">
+                <button class="btn-primary" onclick="confirmPlace()">确认</button>
+                <button onclick="cancelPlace()" style="background: #999; color: white; padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer;">取消</button>
+            </div>
+        </div>
+    </div>
+    
     <div class="modal" id="modal">
         <div class="modal-content">
             <h2 id="winnerText">🎉 黑棋获胜！</h2>
@@ -395,7 +410,7 @@
         let currentPlayer = 'black';
         let history = [];
         let gameOver = false;
-        let mode = 'PvP'; // 'PvP' or 'PvAI'
+        let mode = 'PvP';
         
         const directions = [
             [0, 1], [1, 0], [1, 1], [1, -1]
@@ -423,6 +438,27 @@
             // 人机模式下，黑棋先手
             if (mode === 'PvAI' && currentPlayer === 'white') return;
             
+            // 显示确认弹窗
+            showConfirmModal(row, col);
+        }
+        
+        function showConfirmModal(row, col) {
+            const modal = document.getElementById('confirmModal');
+            const msg = document.getElementById('confirmMsg');
+            const playerName = mode === 'PvAI' ? (currentPlayer === 'black' ? '你(黑棋)' : 'AI(白棋)') : (currentPlayer === 'black' ? '黑棋' : '白棋');
+            msg.textContent = `${playerName} 落子于 ${row + 1}行${col + 1}列，确认？`;
+            
+            modal.dataset.row = row;
+            modal.dataset.col = col;
+            modal.classList.add('show');
+        }
+        
+        function confirmPlace() {
+            const modal = document.getElementById('confirmModal');
+            const row = parseInt(modal.dataset.row);
+            const col = parseInt(modal.dataset.col);
+            modal.classList.remove('show');
+            
             placePiece(row, col);
             
             if (gameOver) return;
@@ -430,6 +466,10 @@
             if (mode === 'PvAI' && currentPlayer === 'white') {
                 setTimeout(aiMove, 300);
             }
+        }
+        
+        function cancelPlace() {
+            document.getElementById('confirmModal').classList.remove('show');
         }
         
         function placePiece(row, col, isAI = false) {
@@ -710,6 +750,7 @@
             gameOver = false;
             
             document.getElementById('modal').classList.remove('show');
+            document.getElementById('confirmModal').classList.remove('show');
             document.getElementById('logContent').innerHTML = '';
             updatePlayerIndicator();
             initBoard();
