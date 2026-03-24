@@ -378,7 +378,7 @@
         let data = [];
         
         // 从 JSON 文件加载数据
-        fetch('savings_data.json')
+        fetch('data.json')
             .then(response => response.json())
             .then(jsonData => {
                 data = jsonData.records;
