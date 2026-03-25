@@ -463,9 +463,9 @@
       #main { flex-direction: column; overflow: visible; }
 
       #map-container {
-        height: 55vw;
-        min-height: 260px;
-        max-height: 420px;
+        height: 100vw;
+        min-height: 360px;
+        max-height: 600px;
       }
 
       #side-panel {
@@ -479,7 +479,7 @@
     }
 
     @media (max-width: 480px) {
-      #map-container { height: 65vw; }
+      #map-container { height: 110vw; min-height: 380px; max-height: 520px; }
       .stat-value { font-size: 16px; }
     }
 
@@ -682,7 +682,7 @@ function renderMap() {
   // Projection — fit China
   const projection = d3.geoMercator()
     .center([105, 38])
-    .scale(Math.min(W, H) * 1.05)
+    .scale(W * 1.05)
     .translate([W / 2, H / 2]);
 
   const path = d3.geoPath().projection(projection);
