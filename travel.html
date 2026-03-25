@@ -4,7 +4,28 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>我的旅行地图</title>
-  <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+  <script>
+    // 多 CDN 降级加载 D3.js（国内优先）
+    (function() {
+      var cdns = [
+        'https://unpkg.com/d3@7.9.0/dist/d3.min.js',
+        'https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js',
+        'https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js'
+      ];
+      var idx = 0;
+      function load() {
+        if (idx >= cdns.length) {
+          document.getElementById('loading').textContent = '❌ D3.js 加载失败，请检查网络后刷新';
+          return;
+        }
+        var s = document.createElement('script');
+        s.src = cdns[idx++];
+        s.onerror = load;
+        document.head.appendChild(s);
+      }
+      load();
+    })();
+  </script>
   <style>
     /* ===== Reset & Base ===== */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -594,7 +615,7 @@ async function loadData() {
   let geoRes;
   const geoUrls = [
     'https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json',
-    'https://raw.githubusercontent.com/echarts-maps/echarts-china-cities-js/master/geojson/china.json'
+    'china.json'
   ];
   for (const url of geoUrls) {
     geoRes = await fetchWithTimeout(url);
