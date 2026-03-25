@@ -2,30 +2,12 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>我的旅行地图</title>
-  <script>
-    // 多 CDN 降级加载 D3.js（国内优先）
-    (function() {
-      var cdns = [
-        'https://unpkg.com/d3@7.9.0/dist/d3.min.js',
-        'https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js',
-        'https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js'
-      ];
-      var idx = 0;
-      function load() {
-        if (idx >= cdns.length) {
-          document.getElementById('loading').textContent = '❌ D3.js 加载失败，请检查网络后刷新';
-          return;
-        }
-        var s = document.createElement('script');
-        s.src = cdns[idx++];
-        s.onerror = load;
-        document.head.appendChild(s);
-      }
-      load();
-    })();
-  </script>
+  
+  <!-- 高德地图 JS API v2.0 -->
+  <script src="https://webapi.amap.com/maps?v=2.0&key=954aa34e28039ff97fadb652a5832b47&plugin=AMap.InfoWindow,AMap.ToolBar"></script>
+  
   <style>
     /* ===== Reset & Base ===== */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -41,12 +23,6 @@
       --text:       #e2e8f0;
       --text-muted: #64748b;
       --text-dim:   #94a3b8;
-      --map-fill:   #0f1e35;
-      --map-hover:  #162840;
-      --map-stroke: #1e3a5f;
-      --visited:    #1e3a5f;
-      --visited-h:  #254d7a;
-      --blue-glow:  #3b82f640;
     }
 
     html, body {
@@ -127,75 +103,57 @@
       overflow: hidden;
     }
 
-    #map-svg {
+    #amap-container {
       width: 100%;
       height: 100%;
-      display: block;
     }
 
-    .province {
-      fill: var(--map-fill);
-      stroke: var(--map-stroke);
-      stroke-width: 0.8;
-      transition: fill 0.2s;
-      cursor: default;
+    /* 自定义 Marker 样式 */
+    .city-marker {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      cursor: pointer;
     }
-    .province:hover { fill: var(--map-hover); }
-    .province.visited { fill: var(--visited); }
-    .province.visited:hover { fill: var(--visited-h); }
 
-    /* City dots */
-    .city-group { cursor: pointer; }
+    .marker-dot {
+      width: 16px;
+      height: 16px;
+      background: var(--accent);
+      border: 2px solid #fff;
+      border-radius: 50%;
+      box-shadow: 0 0 10px var(--accent-glow);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
 
-    .city-ring {
-      fill: none;
-      stroke: var(--accent);
-      stroke-width: 1.5;
+    .marker-ring {
+      position: absolute;
+      width: 30px;
+      height: 30px;
+      border: 2px solid var(--accent);
+      border-radius: 50%;
       opacity: 0.4;
       animation: pulse-ring 2.5s ease-out infinite;
+      top: -7px;
     }
-    .city-dot {
-      fill: var(--accent);
-      stroke: #fff;
-      stroke-width: 1.5;
-      filter: drop-shadow(0 0 6px var(--accent-glow));
-      transition: r 0.2s, filter 0.2s;
-    }
-    .city-group:hover .city-dot {
-      filter: drop-shadow(0 0 12px var(--accent));
-    }
-    .city-label {
-      fill: var(--text);
-      font-size: 11px;
-      font-weight: 500;
-      pointer-events: none;
-      text-shadow: 0 1px 4px #000;
+
+    .city-marker:hover .marker-dot {
+      transform: scale(1.3);
+      box-shadow: 0 0 16px var(--accent);
     }
 
     @keyframes pulse-ring {
-      0%   { r: 6px; opacity: 0.6; }
-      100% { r: 22px; opacity: 0; }
+      0%   { transform: scale(0.5); opacity: 0.6; }
+      100% { transform: scale(1.5); opacity: 0; }
     }
 
-    /* Home city (深圳) */
-    .city-home .city-dot {
-      fill: #38bdf8;
-      filter: drop-shadow(0 0 6px #38bdf840);
+    /* 起点城市样式 */
+    .city-marker-home .marker-dot {
+      background: #38bdf8;
+      box-shadow: 0 0 10px #38bdf840;
     }
-    .city-home .city-ring { stroke: #38bdf8; }
-    .city-home:hover .city-dot { filter: drop-shadow(0 0 12px #38bdf8); }
-
-    /* Flight arcs */
-    .trip-arc {
-      fill: none;
-      stroke: var(--accent);
-      stroke-width: 1.2;
-      stroke-dasharray: 4 3;
-      opacity: 0.35;
-      animation: dash-move 3s linear infinite;
-    }
-    @keyframes dash-move {
-      to { stroke-dashoffset: -28; }
+    .city-marker-home .marker-ring {
+      border-color: #38bdf8;
     }
 
     /* ===== Side Panel ===== */
@@ -425,25 +383,27 @@
       border-top: 1px solid var(--border);
     }
 
-    /* ===== Map tooltip ===== */
-    #tooltip {
-      position: fixed;
-      pointer-events: none;
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 8px 12px;
-      font-size: 12px;
-      color: var(--text);
-      z-index: 50;
-      opacity: 0;
-      transition: opacity 0.15s;
-      white-space: nowrap;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    /* ===== Loading ===== */
+    #loading {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-deep);
+      z-index: 20;
+      flex-direction: column;
+      gap: 16px;
     }
-    #tooltip.show { opacity: 1; }
-    #tooltip .tt-city { font-weight: 700; font-size: 14px; color: var(--accent); }
-    #tooltip .tt-count { color: var(--text-muted); margin-top: 2px; }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { color: var(--text-muted); font-size: 13px; letter-spacing: 1px; }
 
     /* ===== Responsive ===== */
     @media (max-width: 768px) {
@@ -483,30 +443,14 @@
       .stat-value { font-size: 16px; }
     }
 
-    /* ===== Loading ===== */
-    #loading {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: var(--bg-deep);
-      z-index: 20;
-      flex-direction: column;
-      gap: 16px;
-    }
-    .spinner {
-      width: 40px; height: 40px;
-      border: 3px solid var(--border);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .loading-text { color: var(--text-muted); font-size: 13px; letter-spacing: 1px; }
-
     @media (prefers-reduced-motion: reduce) {
-      .pulse-ring, .dash-move, * { animation: none !important; }
+      .pulse-ring, * { animation: none !important; }
+    }
+
+    /* 高德地图控件样式覆盖 */
+    :root .amap-toolbar, 
+    :root .amap-ctrl-content {
+      display: none !important;
     }
   </style>
 </head>
@@ -540,9 +484,9 @@
     <div id="map-container">
       <div id="loading">
         <div class="spinner"></div>
-        <div class="loading-text">加载地图数据…</div>
+        <div class="loading-text">加载高德地图…</div>
       </div>
-      <svg id="map-svg"></svg>
+      <div id="amap-container"></div>
     </div>
 
     <!-- Side Panel -->
@@ -552,12 +496,6 @@
     </aside>
 
   </div>
-</div>
-
-<!-- Tooltip -->
-<div id="tooltip">
-  <div class="tt-city" id="tt-city"></div>
-  <div class="tt-count" id="tt-count"></div>
 </div>
 
 <!-- Modal -->
@@ -578,9 +516,11 @@
 // ============================================================
 //  Data & State
 // ============================================================
+let map = null;
 let tripsData = [];
 let cityMap = {};   // cityName -> { name, lng, lat, trips[] }
-let geoData = null;
+let markers = [];
+let infoWindow = null;
 
 const HOME_CITY = { name: "深圳", lng: 114.06, lat: 22.54 };
 
@@ -590,56 +530,15 @@ const transportIcon = {
 };
 
 // ============================================================
-//  Fetch with timeout
+//  Helpers
 // ============================================================
-async function fetchWithTimeout(url, timeout = 10000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
-  try {
-    const res = await fetch(url, { signal: controller.signal });
-    clearTimeout(timer);
-    return res;
-  } catch (e) {
-    clearTimeout(timer);
-    throw e;
-  }
+function escapeHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ============================================================
-//  Fetch data
-// ============================================================
-async function loadData() {
-  const tripsRes = await fetchWithTimeout('trips.json');
-
-  // Try primary CDN, then fallback
-  let geoRes;
-  const geoUrls = [
-    'https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json',
-    'china.json'
-  ];
-  for (const url of geoUrls) {
-    geoRes = await fetchWithTimeout(url);
-    if (geoRes.ok) break;
-  }
-
-  if (!tripsRes.ok) throw new Error('无法加载 trips.json');
-  if (!geoRes.ok) throw new Error('无法加载地图数据');
-
-  const tripsJson = await tripsRes.json();
-  geoData = await geoRes.json();
-
-  tripsData = tripsJson.trips.sort((a, b) => new Date(b.date) - new Date(a.date));
-
-  // Build city map (destination cities)
-  tripsData.forEach(t => {
-    const key = t.to.name;
-    if (!cityMap[key]) {
-      cityMap[key] = { name: key, lng: t.to.lng, lat: t.to.lat, trips: [] };
-    }
-    cityMap[key].trips.push(t);
-  });
-
-  return true;
+function formatDate(dateStr) {
+  const d = new Date(dateStr);
+  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`;
 }
 
 // ============================================================
@@ -669,132 +568,197 @@ function animateCount(id, target) {
 }
 
 // ============================================================
-//  Map
+//  Map - 高德地图
 // ============================================================
-function renderMap() {
-  const container = document.getElementById('map-container');
-  const svg = d3.select('#map-svg');
-  svg.selectAll('*').remove();
-
-  const W = container.clientWidth;
-  const H = container.clientHeight;
-
-  // 根据容器宽高比自适应缩放，确保中国地图完整居中
-  // 中国地图在 Mercator 投影下宽高比约 1.6:1
-  const mapAspect = 1.6;
-  let scale;
-  if (W / H >= mapAspect) {
-    scale = H * 1.1;
-  } else {
-    scale = (W / mapAspect) * 1.1;
-  }
-
-  const projection = d3.geoMercator()
-    .center([105, 35])
-    .scale(scale)
-    .translate([W * 0.5, H * 0.5]);
-
-  const path = d3.geoPath().projection(projection);
-
-  // Visited province detection (rough bounding box check)
-  const visitedCities = Object.values(cityMap);
-
-  // Draw provinces
-  const g = svg.append('g').attr('class', 'provinces');
-  g.selectAll('path')
-    .data(geoData.features)
-    .join('path')
-    .attr('class', d => {
-      // Check if any visited city is roughly in this province
-      const bbox = path.bounds(d);
-      const inProv = visitedCities.some(c => {
-        const [px, py] = projection([c.lng, c.lat]);
-        return px >= bbox[0][0] && px <= bbox[1][0] &&
-               py >= bbox[0][1] && py <= bbox[1][1];
-      });
-      return 'province' + (inProv ? ' visited' : '');
-    })
-    .attr('d', path);
-
-  // Draw arcs (flight paths)
-  const arcG = svg.append('g').attr('class', 'arcs');
-  tripsData.forEach(t => {
-    const src = projection([t.from.lng, t.from.lat]);
-    const dst = projection([t.to.lng, t.to.lat]);
-    if (!src || !dst) return;
-
-    // Quadratic bezier control point (arc upward)
-    const mx = (src[0] + dst[0]) / 2;
-    const my = (src[1] + dst[1]) / 2 - Math.hypot(dst[0]-src[0], dst[1]-src[1]) * 0.25;
-
-    arcG.append('path')
-      .attr('class', 'trip-arc')
-      .attr('d', `M${src[0]},${src[1]} Q${mx},${my} ${dst[0]},${dst[1]}`)
-      .style('stroke-dashoffset', 0);
+function initMap() {
+  // 创建地图实例
+  map = new AMap.Map('amap-container', {
+    center: [105, 36],  // 中国中心
+    zoom: 5,           // 缩放级别
+    viewMode: '2D',
+    mapStyle: 'amap://styles/dark',  // 深色主题
+    showIndoorMap: false,
+    showBuildingBlock: false,
+    // 禁用默认控件
+    showControlBar: false,
   });
 
-  // Draw home city (深圳)
-  const [hx, hy] = projection([HOME_CITY.lng, HOME_CITY.lat]);
-  const hg = svg.append('g')
-    .attr('class', 'city-group city-home')
-    .attr('transform', `translate(${hx},${hy})`);
+  // 禁用旋转和缩放控件（移动端用双指操作）
+  map.addControl(new AMap.ToolBar({
+    visible: false,
+    position: 'RT'
+  }));
 
-  hg.append('circle').attr('class', 'city-ring').attr('r', 6);
-  hg.append('circle').attr('class', 'city-dot').attr('r', 5);
-  hg.append('text')
-    .attr('class', 'city-label')
-    .attr('x', 8).attr('y', 4)
-    .text(HOME_CITY.name);
+  // 地图加载完成后加载数据
+  map.on('complete', () => {
+    console.log('高德地图加载完成');
+    loadTripsData();
+  });
+}
 
-  // Draw destination cities
-  const maxVisits = Math.max(...Object.values(cityMap).map(c => c.trips.length), 1);
-  const rScale = d3.scaleSqrt().domain([1, maxVisits]).range([6, 14]);
-
-  const tooltip = document.getElementById('tooltip');
-  const ttCity  = document.getElementById('tt-city');
-  const ttCount = document.getElementById('tt-count');
-
-  Object.values(cityMap).forEach(city => {
-    const [cx, cy] = projection([city.lng, city.lat]);
-    const r = rScale(city.trips.length);
-
-    const cg = svg.append('g')
-      .attr('class', 'city-group')
-      .attr('transform', `translate(${cx},${cy})`)
-      .style('cursor', 'pointer');
-
-    // Pulse ring
-    cg.append('circle').attr('class', 'city-ring').attr('r', r);
-
-    // Main dot
-    cg.append('circle')
-      .attr('class', 'city-dot')
-      .attr('r', r);
-
-    // Label
-    cg.append('text')
-      .attr('class', 'city-label')
-      .attr('x', r + 4)
-      .attr('y', 4)
-      .text(city.name);
-
-    // Events
-    cg.on('mouseenter', (event) => {
-      ttCity.textContent = city.name;
-      ttCount.textContent = `共 ${city.trips.length} 次出行`;
-      tooltip.classList.add('show');
+function loadTripsData() {
+  document.getElementById('loading').querySelector('.loading-text').textContent = '加载出行数据…';
+  
+  fetch('trips.json')
+    .then(res => {
+      if (!res.ok) throw new Error('无法加载 trips.json');
+      return res.json();
     })
-    .on('mousemove', (event) => {
-      tooltip.style.left = (event.clientX + 14) + 'px';
-      tooltip.style.top  = (event.clientY - 10) + 'px';
+    .then(data => {
+      tripsData = data.trips.sort((a, b) => new Date(b.date) - new Date(a.date));
+      
+      // Build city map (destination cities)
+      tripsData.forEach(t => {
+        const key = t.to.name;
+        if (!cityMap[key]) {
+          cityMap[key] = { name: key, lng: t.to.lng, lat: t.to.lat, trips: [] };
+        }
+        cityMap[key].trips.push(t);
+      });
+
+      // 隐藏 loading
+      document.getElementById('loading').style.display = 'none';
+      
+      // 渲染数据
+      renderStats();
+      renderMarkers();
+      renderTimeline();
+      renderRoutes();
     })
-    .on('mouseleave', () => {
-      tooltip.classList.remove('show');
-    })
-    .on('click', () => {
-      tooltip.classList.remove('show');
-      openModal(city);
+    .catch(err => {
+      console.error('加载数据失败:', err);
+      document.getElementById('loading').innerHTML =
+        `<div style="color:#ef4444;text-align:center;padding:20px">
+          <div style="font-size:32px;margin-bottom:12px">⚠️</div>
+          <div>数据加载失败，请检查网络连接</div>
+          <div style="font-size:12px;color:#64748b;margin-top:8px">${err.message}</div>
+        </div>`;
     });
+}
+
+function renderMarkers() {
+  // 计算最大访问次数
+  const maxVisits = Math.max(...Object.values(cityMap).map(c => c.trips.length), 1);
+  
+  // 标记点大小范围
+  const minSize = 12;
+  const maxSize = 28;
+  const sizeScale = (count) => {
+    if (maxVisits <= 1) return minSize;
+    return minSize + (maxSize - minSize) * (count - 1) / (maxVisits - 1);
+  };
+
+  // 创建信息窗体
+  infoWindow = new AMap.InfoWindow({
+    isCustom: false,
+    autoMove: true,
+    avoidBase: true,
+    closeWhenClickMap: true,
+    offset: new AMap.Pixel(0, -30)
+  });
+
+  // 绘制目的地城市标记
+  Object.values(cityMap).forEach(city => {
+    const size = sizeScale(city.trips.length);
+    const marker = createMarker(city.lng, city.lat, size, city, false);
+    markers.push(marker);
+    marker.setMap(map);
+  });
+
+  // 绘制起点城市（深圳）- 固定大小
+  const homeMarker = createMarker(HOME_CITY.lng, HOME_CITY.lat, 14, { name: HOME_CITY.name, trips: [] }, true);
+  markers.push(homeMarker);
+  homeMarker.setMap(map);
+}
+
+function createMarker(lng, lat, size, city, isHome) {
+  // 创建自定义 DOM 标记
+  const markerContent = document.createElement('div');
+  markerContent.className = isHome ? 'city-marker city-marker-home' : 'city-marker';
+  
+  const markerDot = document.createElement('div');
+  markerDot.className = 'marker-dot';
+  markerDot.style.width = size + 'px';
+  markerDot.style.height = size + 'px';
+  
+  markerContent.appendChild(markerDot);
+  
+  // 非起点城市添加脉冲环
+  if (!isHome) {
+    const markerRing = document.createElement('div');
+    markerRing.className = 'marker-ring';
+    markerContent.appendChild(markerRing);
+  }
+
+  // 创建 AMap.Marker
+  const marker = new AMap.Marker({
+    position: [lng, lat],
+    content: markerContent,
+    offset: new AMap.Pixel(-size/2, -size/2),
+    zIndex: isHome ? 100 : city.trips.length
+  });
+
+  // 点击事件 - 打开信息窗体
+  marker.on('click', () => {
+    if (isHome) return;
+    showInfoWindow(city);
+  });
+
+  // 鼠标悬停提示
+  if (!isHome) {
+    marker.on('mouseover', () => {
+      marker.setzIndex(999);
+    });
+    marker.on('mouseout', () => {
+      marker.setzIndex(city.trips.length);
+    });
+  }
+
+  return marker;
+}
+
+function showInfoWindow(city) {
+  const icon = transportIcon[city.trips[0].transport] || '🚌';
+  
+  let tripsHtml = city.trips.map(t => `
+    <div style="padding: 10px 0; border-bottom: 1px solid #1e2d45;">
+      <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;">${escapeHtml(t.title)}</div>
+      <div style="font-size: 12px; color: #94a3b8;">
+        ${escapeHtml(t.from.name)} → ${escapeHtml(t.to.name)} | ${icon} ${escapeHtml(t.transport)} | ${escapeHtml(t.distance.toLocaleString())} km
+      </div>
+      <div style="font-size: 12px; color: #64748b; margin-top: 4px;">${escapeHtml(formatDate(t.date))}</div>
+      ${t.note ? `<div style="font-size: 12px; color: #64748b; margin-top: 4px;">💬 ${escapeHtml(t.note)}</div>` : ''}
+    </div>
+  `).join('');
+
+  const content = `
+    <div style="background: #111827; padding: 16px; max-width: 360px; color: #e2e8f0;">
+      <div style="font-size: 18px; font-weight: 700; margin-bottom: 4px;">📍 ${escapeHtml(city.name)}</div>
+      <div style="font-size: 13px; color: #64748b; margin-bottom: 12px;">共 ${city.trips.length} 次出行记录</div>
+      <div>${tripsHtml}</div>
+    </div>
+  `;
+
+  infoWindow.setContent(content);
+  infoWindow.open(map, [city.lng, city.lat]);
+}
+
+function renderRoutes() {
+  // 绘制出行路线（从深圳到各城市）
+  tripsData.forEach(trip => {
+    const line = new AMap.Polyline({
+      path: [
+        [trip.from.lng, trip.from.lat],
+        [trip.to.lng, trip.to.lat]
+      ],
+      strokeColor: '#f97316',
+      strokeWeight: 2,
+      strokeOpacity: 0.4,
+      strokeDasharray: [4, 3],
+      strokeStyle: 'dashed',
+      zIndex: 1
+    });
+    line.setMap(map);
   });
 }
 
@@ -832,7 +796,12 @@ function renderTimeline() {
 
     card.addEventListener('click', () => {
       const city = cityMap[trip.to.name];
-      if (city) openModal(city, trip.id);
+      if (city) {
+        // 移动地图到该城市
+        map.setCenter([city.lng, city.lat]);
+        map.setZoom(8);
+        showInfoWindow(city);
+      }
     });
 
     container.appendChild(card);
@@ -840,7 +809,7 @@ function renderTimeline() {
 }
 
 // ============================================================
-//  Modal
+//  Modal（备用，用于更详细的城市信息展示）
 // ============================================================
 function openModal(city, highlightId) {
   const overlay = document.getElementById('modal-overlay');
@@ -896,50 +865,49 @@ document.getElementById('modal-overlay').addEventListener('click', e => {
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
 // ============================================================
-//  Helpers
-// ============================================================
-function escapeHtml(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-function formatDate(dateStr) {
-  const d = new Date(dateStr);
-  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`;
-}
-
-// ============================================================
 //  Resize
 // ============================================================
 let resizeTimer;
 window.addEventListener('resize', () => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => {
-    if (geoData) renderMap();
+    if (map) {
+      map.resize();
+    }
   }, 300);
 });
 
 // ============================================================
 //  Init
 // ============================================================
-async function init() {
+let initRetry = 0;
+function init() {
   try {
-    await loadData();
-    document.getElementById('loading').style.display = 'none';
-    renderStats();
-    renderMap();
-    renderTimeline();
+    // 等待 AMap 全局对象可用
+    if (typeof AMap === 'undefined') {
+      if (++initRetry > 20) {
+        document.getElementById('loading').innerHTML =
+          '<div style="color:#ef4444;text-align:center;padding:20px"><div style="font-size:32px;margin-bottom:12px">⚠️</div><div>地图加载超时，请刷新页面</div></div>';
+        return;
+      }
+      setTimeout(init, 100);
+      return;
+    }
+    initRetry = 0;
+    initMap();
   } catch (err) {
     console.error('初始化失败:', err);
     document.getElementById('loading').innerHTML =
       `<div style="color:#ef4444;text-align:center;padding:20px">
         <div style="font-size:32px;margin-bottom:12px">⚠️</div>
-        <div>地图加载失败，请检查网络连接</div>
+        <div>地图初始化失败</div>
         <div style="font-size:12px;color:#64748b;margin-top:8px">${err.message}</div>
       </div>`;
   }
 }
 
-init();
+// 页面加载完成后初始化
+window.addEventListener('load', init);
 </script>
 </body>
 </html>
