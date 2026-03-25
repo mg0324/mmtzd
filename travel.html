@@ -180,6 +180,35 @@
       text-transform: uppercase;
     }
 
+    .search-box {
+      position: relative;
+      padding: 0 10px 10px;
+    }
+    .search-box input {
+      width: 100%;
+      padding: 8px 12px 8px 32px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg-card2);
+      color: var(--text);
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .search-box input:focus {
+      border-color: var(--accent);
+    }
+    .search-box input::placeholder {
+      color: var(--text-muted);
+    }
+    .search-box .search-icon {
+      position: absolute;
+      left: 18px;
+      top: 8px;
+      font-size: 14px;
+      pointer-events: none;
+    }
+
     #timeline {
       flex: 1;
       overflow-y: auto;
@@ -495,6 +524,10 @@
     <!-- Side Panel -->
     <aside id="side-panel">
       <div class="panel-header">出行记录</div>
+      <div class="search-box">
+        <input type="text" id="search-input" placeholder="搜索城市/日期/交通..." oninput="filterTrips(this.value)">
+        <span class="search-icon">🔍</span>
+      </div>
       <div id="timeline"></div>
     </aside>
 
@@ -814,6 +847,37 @@ function renderTimeline() {
   });
 }
 
+// 搜索过滤
+function filterTrips(keyword) {
+  const kw = keyword.trim().toLowerCase();
+  const cards = document.querySelectorAll('.trip-card');
+  
+  if (!kw) {
+    cards.forEach(c => c.style.display = '');
+    return;
+  }
+  
+  cards.forEach(card => {
+    const id = card.dataset.id;
+    const trip = tripsData.find(t => t.id === id);
+    if (!trip) return;
+    
+    // 搜索字段：标题、出发地、目的地、交通方式、日期、备注
+    const fields = [
+      trip.title,
+      trip.from?.name,
+      trip.to?.name,
+      trip.transport,
+      trip.date,
+      trip.note,
+      // 日期中文格式
+      formatDate(trip.date)
+    ].filter(Boolean).join(' ').toLowerCase();
+    
+    card.style.display = fields.includes(kw) ? '' : 'none';
+  });
+}
+
 // ============================================================
 //  Modal（备用，用于更详细的城市信息展示）
 // ============================================================
@@ -888,15 +952,21 @@ window.addEventListener('resize', () => {
 // ============================================================
 let initRetry = 0;
 function init() {
+  // 等 DOM 渲染完成 + 一个 paint cycle，确保容器尺寸已计算
+  requestAnimationFrame(() => {
+    _doInit();
+  });
+}
+
+function _doInit() {
   try {
-    // 等待 AMap 全局对象可用
     if (typeof AMap === 'undefined') {
       if (++initRetry > 20) {
         document.getElementById('loading').innerHTML =
           '<div style="color:#ef4444;text-align:center;padding:20px"><div style="font-size:32px;margin-bottom:12px">⚠️</div><div>地图加载超时，请刷新页面</div></div>';
         return;
       }
-      setTimeout(init, 100);
+      setTimeout(_doInit, 100);
       return;
     }
     initRetry = 0;
