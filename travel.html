@@ -576,18 +576,9 @@ function initMap() {
     center: [105, 36],  // 中国中心
     zoom: 5,           // 缩放级别
     viewMode: '2D',
-    mapStyle: 'amap://styles/dark',  // 深色主题
     showIndoorMap: false,
     showBuildingBlock: false,
-    // 禁用默认控件
-    showControlBar: false,
   });
-
-  // 禁用旋转和缩放控件（移动端用双指操作）
-  map.addControl(new AMap.ToolBar({
-    visible: false,
-    position: 'RT'
-  }));
 
   // 地图加载完成后加载数据
   map.on('complete', () => {
