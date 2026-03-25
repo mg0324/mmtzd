@@ -463,9 +463,9 @@
       #main { flex-direction: column; overflow: visible; }
 
       #map-container {
-        height: 100vw;
-        min-height: 360px;
-        max-height: 600px;
+        height: 85vw;
+        min-height: 320px;
+        max-height: 560px;
       }
 
       #side-panel {
@@ -479,7 +479,7 @@
     }
 
     @media (max-width: 480px) {
-      #map-container { height: 110vw; min-height: 380px; max-height: 520px; }
+      #map-container { height: 85vw; min-height: 320px; max-height: 560px; }
       .stat-value { font-size: 16px; }
     }
 
@@ -679,13 +679,14 @@ function renderMap() {
   const W = container.clientWidth;
   const H = container.clientHeight;
 
-  // Projection — fit China
-  const projection = d3.geoMercator()
-    .center([105, 38])
-    .scale(W * 1.05)
-    .translate([W / 2, H / 2]);
-
+  // Projection — 用 fitExtent 自动适配，保证地图完整显示
+  const projection = d3.geoMercator();
   const path = d3.geoPath().projection(projection);
+  const padding = 10;
+  projection.fitExtent(
+    [[padding, padding], [W - padding, H - padding]],
+    { type: 'FeatureCollection', features: geoData.features }
+  );
 
   // Visited province detection (rough bounding box check)
   const visitedCities = Object.values(cityMap);
