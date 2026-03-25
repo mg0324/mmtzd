@@ -679,27 +679,20 @@ function renderMap() {
   const W = container.clientWidth;
   const H = container.clientHeight;
 
-  // Projection — 手动设置中心和缩放，确保中国地图完整居中显示
-  // 中国地图经度范围约 73°E~135°E，纬度范围约 18°N~53°N
-  // 中心点约 (105°E, 36°N)，宽高比约 1.4:1
-  const chinaAspect = 1.4; // 宽/高
-  let scale, tx, ty;
-  if (W / H > chinaAspect) {
-    // 容器比地图宽，以高度为基准
-    scale = H * 1.25;
-    tx = W / 2 - (H * chinaAspect * 0.5 - H * 0.5) * 0;
-    ty = H * 0.45;
+  // 根据容器宽高比自适应缩放，确保中国地图完整居中
+  // 中国地图在 Mercator 投影下宽高比约 1.6:1
+  const mapAspect = 1.6;
+  let scale;
+  if (W / H >= mapAspect) {
+    scale = H * 1.1;
   } else {
-    // 容器比地图窄，以宽度为基准
-    scale = W * 0.9;
-    tx = W / 2;
-    ty = H * 0.5;
+    scale = (W / mapAspect) * 1.1;
   }
 
   const projection = d3.geoMercator()
-    .center([105, 36])
+    .center([105, 35])
     .scale(scale)
-    .translate([tx, ty]);
+    .translate([W * 0.5, H * 0.5]);
 
   const path = d3.geoPath().projection(projection);
 
